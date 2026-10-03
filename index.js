@@ -49,6 +49,7 @@ async function connectToMongoDB() {
     const db = client.db("hireloopDB");
     const jobCollection = db.collection("jobs");
     const companyCollection = db.collection("companies");
+    const applicationCollection = db.collection("applications");
 
     app.get("/api/jobs", async (req, res) => {
       const query = {};
@@ -63,24 +64,85 @@ async function connectToMongoDB() {
     });
 
     app.get("/api/jobs/:id", async (req, res) => {
-      const {id}= req.params;
+      const { id } = req.params;
       const query = {
-        _id: new ObjectId(id)
+        _id: new ObjectId(id),
       };
       const result = await jobCollection.findOne(query);
       res.send(result);
-    })
-
+    });
 
     app.post("/api/jobs", async (req, res) => {
       const job = req.body;
-      const newJobs={
+      const newJobs = {
         ...job,
-        createdAt:new Date()
-      }
+        createdAt: new Date(),
+      };
       const result = await jobCollection.insertOne(newJobs);
       res.send(result);
       console.log(result, "result of creat job");
+    });
+
+    // application related apis
+
+    app.get("/api/applications", async (req, res) => {
+      const query = {};
+      if(req.query.applicantId){
+        query.applicantId = req.query.applicantId;
+      }
+      if(req.query.jobId){
+        query.jobId = req.query.jobId;
+      }
+      const result = await applicationCollection.find(query).toArray();
+      res.send(result);
+    });
+
+    app.post("/api/applications", async (req, res) => {
+      const {
+        jobId,
+        applicantId,
+        applicantEmail,
+        fullName,
+        phone,
+        resumeUrl,
+        coverLetter,
+      } = req.body;
+
+      const job = await jobCollection.findOne({ _id: new ObjectId(jobId) });
+      if (!job) {
+        return res.status(404).send({ error: true, message: "Job not found." });
+      }
+
+      const alreadyApplied = await applicationCollection.findOne({
+        jobId: job._id,
+        applicantId,
+      });
+      if (alreadyApplied) {
+        return res
+          .status(409)
+          .send({
+            error: true,
+            message: "You have already applied for this job.",
+          });
+      }
+
+      const newApplication = {
+        jobId: job._id,
+        jobTitle: job.jobTitle,
+        companyId: job.companyId,
+        companyName: job.companyName,
+        applicantId,
+        applicantEmail,
+        fullName,
+        phone,
+        resumeUrl,
+        coverLetter,
+        status: "pending",
+        appliedAt: new Date(),
+      };
+
+      const result = await applicationCollection.insertOne(newApplication);
+      res.status(201).send(result);
     });
 
     // companny related apis
